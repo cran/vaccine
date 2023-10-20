@@ -5,8 +5,14 @@
 #' @noRd
 logit <- function(x) { log(x/(1-x)) }
 expit <- function(x) { 1 / (1+exp(-x)) }
+expit2 <- function(x) { (expit(x)-0.001)/0.998 }
+logit2 <- function(x) { logit(0.001+0.998*x) }
+log2 <- function(x) { log(x+0.001) }
+exp2 <- function(x) { exp(x) - 0.001 }
 deriv_expit <- function(x) { exp(x) / ((1+exp(x))^2) }
 deriv_logit <- function(x) { 1 / (x-x^2) }
+deriv_logit2 <- function(x) { 0.998*deriv_logit(0.001+0.998*x) }
+deriv_log2 <- function(x) { 1 / (x+0.001) }
 
 
 
@@ -69,23 +75,21 @@ memoise2 <- function(fnc) {
 
 #' Round data values
 #'
-#' @param dat_orig Dataset returned by `load_data`
-#' @param grid_size A list, as specified in `est_np`
+#' @param dat Dataset returned by `load_data` (possibly filtered)
+#' @param grid_size A list, as specified in `params_ce_np`
 #' @return Dataset with values rounded
 #' @noRd
-create_grid <- function(dat_orig, grid_size, t_0) {
+create_grid <- function(dat, grid_size, t_0) {
 
-  d <- dat_orig
   grid <- list()
   grid$y <- round(seq(from=0, to=t_0, length.out=grid_size$y), 5)
-  grid$y_ext <- round(seq(from=0, to=max(dat_orig$y),
-                          by=(t_0/(grid_size$y-1))), 5)
+  grid$y_ext <- round(seq(from=0, to=max(dat$y), by=(t_0/(grid_size$y-1))), 5)
   if (!(t_0 %in% grid$y)) { grid$y <- sort(c(grid$y, t_0)) }
   grid$s <- round(seq(from=0, to=1, length.out=grid_size$s), 5)
-  grid$x <- lapply(c(1:length(d$x)), function(i) {
-    x_col <- d$x[,i]
-    if (length(unique(x_col))>grid_size$x) {
-      return(round(seq(from=min(x_col), to=max(x_col),
+  grid$x <- lapply(c(1:attr(dat,"dim_x")), function(i) {
+    x_col <- as.numeric(dat[,i])
+    if (length(unique(x_col[!is.na(x_col)]))>grid_size$x) {
+      return(round(seq(from=min(x_col, na.rm=T), to=max(x_col, na.rm=T),
                        length.out=grid_size$x), 5))
     } else {
       return(NA)
@@ -100,18 +104,18 @@ create_grid <- function(dat_orig, grid_size, t_0) {
 
 #' Round data values
 #'
-#' @param dat_orig Dataset returned by `load_data`
+#' @param dat Dataset returned by `load_data` (possibly filtered)
 #' @param grid A grid, returned by `create_grid`
 #' @param grid_size A list, as specified in `est_np`
 #' @return Dataset with values rounded
 #' @noRd
-round_dat <- function(dat_orig, grid, grid_size) {
-
-  d <- dat_orig
+round_dat <- function(dat, grid, grid_size) {
 
   # Round `y` and `s`
-  d$y <- sapply(d$y, function(y) { grid$y_ext[which.min(abs(grid$y_ext-y))] })
-  d$s <- sapply(d$s, function(s) {
+  dat$y <- sapply(dat$y, function(y) {
+    grid$y_ext[which.min(abs(grid$y_ext-y))]
+  })
+  dat$s <- sapply(dat$s, function(s) {
     if (is.na(s)) {
       return(NA)
     } else {
@@ -120,48 +124,20 @@ round_dat <- function(dat_orig, grid, grid_size) {
   })
 
   # Round `x`
-  for (i in c(1:length(d$x))) {
-    x_col <- d$x[,i]
-    if (length(unique(x_col))>grid_size$x) {
-      d$x[,i] <- sapply(x_col, function(x) {
-        grid$x[[i]][which.min(abs(grid$x[[i]]-x))]
+  for (i in c(1:attr(dat,"dim_x"))) {
+    x_col <- as.numeric(dat[,i])
+    if (length(unique(x_col[!is.na(x_col)]))>grid_size$x) {
+      dat[,i] <- sapply(x_col, function(x) {
+        if (is.na(x)) {
+          return(NA)
+        } else {
+          return(grid$x[[i]][which.min(abs(grid$x[[i]]-x))])
+        }
       })
     }
   }
 
-  # Not rounding weights for now
-
-  return(d)
-
-}
-
-
-
-#' Subset dat_orig according to indices
-#'
-#' @param dat_orig Dataset returned by `load_data`
-#' @param indices Indices to filter dataset by
-#' @return Filtered subsample of dataset
-#' @noRd
-ss <- function(dat_orig, indices) {
-
-  i <- indices
-  dat <- list(
-    y = dat_orig$y[i],
-    delta = dat_orig$delta[i],
-    s = dat_orig$s[i],
-    x = dat_orig$x[i,, drop=F],
-    weights = dat_orig$weights[i],
-    z = dat_orig$z[i]
-  )
-  if (!is.null(dat_orig$spl)) {
-    dat$spl <- dat_orig$spl[i,, drop=F]
-  }
-  if (!is.null(dat_orig$strata)) {
-    dat$strata <- dat_orig$strata[i]
-  }
-  attr(dat, "n_orig") <- attr(dat_orig, "n_orig")
-  attr(dat, "dim_x") <- attr(dat_orig, "dim_x")
+  # !!!!! Note: not rounding weights (for now)
 
   return(dat)
 
@@ -169,15 +145,22 @@ ss <- function(dat_orig, indices) {
 
 
 
-#' Convert dat_orig or dat to a data frame
+#' Find dataframe index of a row
 #'
-#' @param d Either dat_orig or dat
-#' @return Data frame version of data object
+#' @param vec A numeric vector
+#' @param df A dataframe to search
+#' @return The index of the row of `df` at which `vec` is found
 #' @noRd
-as_df <- function(d, strata=F) {
-  df <- cbind(d$x, s=d$s, y=d$y, delta=d$delta, z=d$z, weights=d$weights)
-  if (strata) { df$strata <- d$strata }
-  return(df)
+find_index <- function(vec, df) {
+  vec <- as.numeric(vec)
+  r <- list()
+  for (i in c(1:length(vec))) { r[[i]] <- which(abs(vec[i]-df[,i])<1e-8) }
+  index <- Reduce(intersect, r)
+  if (length(index)!=1) {
+    if (length(index)==0) { stop("length(index)==0") }
+    if (length(index)>1) { stop("length(index)>1") }
+  }
+  return(index)
 }
 
 
@@ -274,4 +257,48 @@ apply2 <- function (X, MARGIN, FUN, ..., simplify=TRUE) {
       dn.ans)
   }
   else ans
+}
+
+
+
+#' Monotonize confidence limits (NP estimator)
+#'
+#' @param ci_lo A vector of confidence interval lower limits
+#' @param ci_up A vector of confidence interval upper limits
+#' @param dir Direction of monotonicity; one of c("decr", "incr")
+#' @param type One of c("regular", "conservative")
+#' @return A list of the form list(ci_lo=c(), ci_up=c())
+#' @noRd
+monotonize_cis <- function(ci_lo, ci_up, dir, type="regular") {
+
+  # This helper function returns the "least nondecreasing majorant"
+  lnm <- function(y) {
+    val <- y[1]
+    for (i in c(2:length(y))) {
+      if (!is.na(y[i]) && !is.na(val) && y[i]<val) { y[i] <- val }
+      val <- y[i]
+    }
+    return(y)
+  }
+
+  if (type=="regular") {
+    if (dir=="decr") {
+      ci_lo <- rev(lnm(rev(ci_lo)))
+      ci_up <- -1*lnm(-1*ci_up)
+    } else {
+      ci_lo <- lnm(ci_lo)
+      ci_up <- -1*rev(lnm(rev(-1*ci_up)))
+    }
+  } else if (type=="conservative") {
+    if (dir=="decr") {
+      ci_lo <- -1*lnm(-1*ci_lo)
+      ci_up <- rev(lnm(rev(ci_up)))
+    } else {
+      ci_lo <- -1*rev(lnm(rev(-1*ci_lo)))
+      ci_up <- lnm(ci_up)
+    }
+  }
+
+  return(list(ci_lo=ci_lo, ci_up=ci_up))
+
 }
