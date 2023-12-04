@@ -143,3 +143,56 @@ construct_infl_fn_risk_v_v2 <- function(dat_v_rd, Q_noS_n_v, omega_noS_n_v, t_0,
 
 
 
+#' !!!!! document
+#'
+#' @param x x
+#' @return x
+#' @noRd
+construct_infl_fn_Theta <- function(omega_n, f_sIx_n, q_tilde_n, etastar_n,
+                                    Theta_os_n) {
+
+  fnc <- function(u,x,y,delta,s,weight) {
+    if (weight==0) {
+      piece_1 <- 0
+      piece_2 <- 0
+    } else {
+      piece_1 <- In(s<=u)
+      piece_2 <- omega_n(x,s,y,delta)/f_sIx_n(s,x)
+    }
+    weight*piece_1*piece_2 +
+      (1-weight) * q_tilde_n(x,y,delta,u) +
+      etastar_n(u,x) -
+      Theta_os_n(u)
+  }
+
+  return(memoise2(fnc))
+
+}
+
+
+
+#' !!!!! document
+#'
+#' @param x x
+#' @return x
+#' @noRd
+construct_infl_fn_beta_n <- function(infl_fn_Theta) {
+
+  u_mc <- round(seq(0.01,1,0.01),2)
+  m <- length(u_mc)
+  lambda_1 <- mean(u_mc) # ~1/2
+  lambda_2 <- mean((u_mc)^2) # ~1/3
+  lambda_3 <- mean((u_mc)^3) # ~1/4
+  piece_1 <- lambda_1*lambda_2-lambda_3
+  piece_2 <- lambda_2-lambda_1^2
+
+  fnc <- function(s,y,delta,weight,x) {
+    return((1/m) * sum(sapply(u_mc, function(u) {
+      infl_fn_Theta(u,x,y,delta,s,weight) *
+        (piece_1*(u-lambda_1)+piece_2*(u^2-lambda_2))
+    })))
+  }
+
+  return(memoise2(fnc))
+
+}

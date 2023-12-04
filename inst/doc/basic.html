@@ -390,7 +390,7 @@ marginalized Cox model.</p>
 <span id="cb4-10"><a href="#cb4-10" tabindex="-1"></a><span class="co">#&gt; 2 risk placebo  0.02938706 0.006486545  0.01901930 0.04514638</span></span>
 <span id="cb4-11"><a href="#cb4-11" tabindex="-1"></a><span class="co">#&gt; 3   ve    both -0.42159246 0.417915188 -1.52937491 0.20101796</span></span></code></pre></div>
 <p>The <code>est_ce</code> function allows us to compute controlled
-effects curves; see <a href="https://academic.oup.com/biostatistics/advance-article/doi/10.1093/biostatistics/kxac24/6644798">Gilbert,
+effects curves; see <a href="https://academic.oup.com/biostatistics/article-abstract/24/4/850/7320953">Gilbert,
 Fong, Kenny, and Carone 2022</a> for more detail.</p>
 <div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a></span>
 <span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a>ests_cox <span class="ot">&lt;-</span> <span class="fu">est_ce</span>(<span class="at">dat=</span>dat, <span class="at">type=</span><span class="st">&quot;Cox&quot;</span>, <span class="at">t_0=</span><span class="dv">578</span>)</span>

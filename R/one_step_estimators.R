@@ -20,7 +20,7 @@ construct_Gamma_os_n <- function(dat_v, omega_n, g_n, q_n, r_tilde_Mn) {
     }
     return((omega_n(x,s,y,delta)/g_n_val)+r_tilde_Mn(s))
   }))
-  piece_2 <- (1-dat_v$weights)
+  piece_2 <- 1 - dat_v$weights
 
   # Remove large intermediate objects
   rm(omega_n,g_n,r_tilde_Mn)
@@ -162,5 +162,59 @@ risk_overall_np_v_v2 <- function(dat_v_rd, Q_noS_n_v, omega_noS_n_v, t_0) {
   }))
 
   return(1+v)
+
+}
+
+
+
+#' Construct Theta_os_n primitive one-step estimator
+#'
+#' @param dat Subsample of dataset returned by ss() for which z==1
+#' @param vals List of values to pre-compute function on; passed to
+#'     construct_superfunc()
+#' @param omega_n A nuisance influence function returned by construct_omega_n()
+#' @param f_sIx_n Conditional density estimator returned by construct_f_sIx_n
+#' @param etastar_n A nuisance estimator returned by construct_etastar_n()
+#' @return Gamma_os_n estimator
+#' @note This is a generalization of the one-step estimator from Westling &
+#'     Carone 2020
+#' @noRd
+construct_Theta_os_n <- function(dat_v, omega_n, f_sIx_n, q_tilde_n,
+                                 etastar_n) {
+
+  dat_v2 <- dat_v[dat_v$z==1,]
+  n_vacc <- attr(dat_v, "n_vacc")
+  dim_x <- attr(dat_v, "dim_x")
+
+  piece_1 <- as.numeric(apply(dat_v2, 1, function(r) {
+    x <- as.numeric(r[1:dim_x])
+    s <- r[["s"]]
+    y <- r[["y"]]
+    delta <- r[["delta"]]
+    weight <- r[["weights"]]
+    f_sIx_n_val <- f_sIx_n(s,x)
+    if (is.nan(f_sIx_n_val)) {
+      stop(paste0("One or more f_sIx_n_val values were NAN; density might be z",
+                  "ero. Try using a density estimator that guarantees positive",
+                  " density estimates."))
+    }
+    return((weight*omega_n(x,s,y,delta)) / f_sIx_n_val)
+  }))
+
+  # Remove large intermediate objects
+  rm(omega_n,f_sIx_n)
+
+  fnc <- function(u) {
+    (1/n_vacc) * sum(piece_1*In(dat_v2$s<=u)) +
+      (1/n_vacc) * sum(as.numeric(apply(dat_v, 1, function(r) {
+        weights <- r[["weights"]]
+        x <- as.numeric(r[1:dim_x])
+        y <- r[["y"]]
+        delta <- r[["delta"]]
+        return((1-weights) * q_tilde_n(x,y,delta,u) + etastar_n(u,x))
+      })))
+  }
+
+  return(memoise2(fnc))
 
 }

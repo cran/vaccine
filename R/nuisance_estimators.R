@@ -1123,3 +1123,87 @@ construct_tau_n <- function(dat_v, deriv_r_Mn, gamma_n, f_sIx_n, g_zn) {
   })
 
 }
+
+
+
+#' Construct nuisance estimator eta*_n
+#'
+#' @param Q_n Conditional survival function estimator returned by construct_Q_n
+#' @param vals List of values to pre-compute function on; passed to
+#'     construct_superfunc()
+#' @return Estimator function of nuisance eta*_0
+#' @noRd
+construct_etastar_n <- function(Q_n, t_0, grid) {
+
+  int_values <- memoise2(function(x) {
+    sapply(grid$s, function(s) { Q_n(t_0, x, s) })
+  })
+
+  fnc <- function(u,x) {
+    indices <- which(grid$s<=u)
+    # s_seq <- vals$s[indices]
+    if (u==0 || length(indices)==0) {
+      return(0)
+    } else {
+      # integral <- u * mean(sapply(s_seq, function(s) { Q_n(t_0, x, s) }))
+      integral <- u * mean(int_values(x)[indices])
+      return(u-integral)
+    }
+  }
+
+  return(memoise2(fnc))
+
+}
+
+
+
+#' Construct q_tilde_n nuisance estimator function
+#'
+#' @param x x
+#' @return q_tilde_n nuisance estimator function
+#' @noRd
+construct_q_tilde_n <- function(type="new", f_n_srv, f_sIx_n, omega_n) {
+
+  if (type=="new") {
+
+    # !!!!! TO DO
+
+    # seq_01 <- round(seq(C$appx$s,1,C$appx$s),-log10(C$appx$s))
+    #
+    # fnc <- function(x, y, delta, u) {
+    #
+    #   denom <- C$appx$s * sum(sapply(seq_01, function(s) {
+    #     f_n_srv(y, delta, x, s) * f_sIx_n(s,x)
+    #   }))
+    #
+    #   if (denom==0) {
+    #     return (0)
+    #   } else {
+    #     if (u==0) {
+    #       return(0)
+    #     } else {
+    #       seq_0u <- round(seq(C$appx$s,u,C$appx$s),-log10(C$appx$s))
+    #       num <- C$appx$s * sum(sapply(seq_0u, function(s) {
+    #         omega_n(x,s,y,delta) * f_n_srv(y, delta, x, s)
+    #       }))
+    #       return(num/denom)
+    #     }
+    #   }
+    #
+    # }
+
+  }
+
+  if (type=="zero") {
+
+    fnc <- function(x, y, delta, u) { 0 }
+    return(fnc) # !!!!! TEMP
+
+  }
+
+  return(memoise2(fnc))
+
+}
+
+
+
