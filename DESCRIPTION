@@ -2,7 +2,7 @@ Package: vaccine
 Type: Package
 Title: Statistical Tools for Immune Correlates Analysis of Vaccine
         Clinical Trial Data
-Version: 1.2.0
+Version: 1.2.1
 Authors@R: person("Avi", "Kenny", email = "avi.kenny@gmail.com", role = c("aut", "cre", "cph"))
 Description: Various semiparametric and nonparametric statistical tools for
     immune correlates analysis of vaccine clinical trial data. This includes
@@ -22,13 +22,15 @@ Imports: dplyr (>= 1.0.10), fdrtool (>= 1.2.17), ggplot2 (>= 3.4.0),
         (>= 1.16), simest (>= 0.4), splines (>= 4.2.2), stats (>=
         4.2.2), SuperLearner (>= 2.0.28), survival (>= 3.4.0), survML
         (>= 0.0.0.9000), truncnorm (>= 1.0.8), e1071 (>= 1.7.12), gam
-        (>= 1.22.3), ranger (>= 0.16.0)
+        (>= 1.22.3), ranger (>= 0.16.0), utils (>= 4.3.2)
 Suggests: knitr, rmarkdown, testthat (>= 3.0.0)
 Depends: R (>= 2.10)
 Config/testthat/edition: 3
+URL: https://github.com/Avi-Kenny/vaccine
+BugReports: https://github.com/Avi-Kenny/vaccine/issues
 NeedsCompilation: no
-Packaged: 2024-02-14 03:19:10 UTC; ak811
+Packaged: 2024-02-16 19:10:54 UTC; ak811
 Author: Avi Kenny [aut, cre, cph]
 Maintainer: Avi Kenny <avi.kenny@gmail.com>
 Repository: CRAN
-Date/Publication: 2024-02-14 05:40:23 UTC
+Date/Publication: 2024-02-16 23:10:02 UTC

@@ -1,3 +1,12 @@
+# vaccine 1.2.1
+
+### Minor changes
+
+- Fixed a bug that displayed an incorrect package version number at startup.
+- Tweaked the SuperLearner library involved in standard error estimation for `est_ce(..., type="NP")`, resulting in improved performance.
+- Fixed a bug related to `plot_ce(..., density_type="kde edge")`.
+- Fixed a minor bug related to the `SuperLearner` package introduced in version 1.2.0.
+
 # vaccine 1.2.0
 
 ### Major changes
