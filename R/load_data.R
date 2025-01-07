@@ -90,7 +90,7 @@ load_data <- function(
               tmp_col <- as.integer(as.factor(val[,col]))
               tmp_unique <- unique(tmp_col)
               tmp_size <- length(tmp_unique)
-              for (i in c(1:tmp_size)) {
+              for (i in c(1:(tmp_size-1))) {
                 col_new <- paste0(col, "_", i)
                 val2[[col_new]] <- as.integer(tmp_col==tmp_unique[i])
               }
@@ -165,11 +165,13 @@ load_data <- function(
   # !!!!! Store two copies of covariates; one for Cox model and one for NPCVE etc.
   # !!!!! Also maybe store a combined version of the dataset (or have a helper function to combine)?
 
+  strata_na <- is.na(.strata[[1]])
+
   if (.groups %in% c("vaccine", "both")) {
 
     # Create strata (if not given)
     .ind_v <- which(.vacc==1)
-    if(is.na(.strata[[1]])) {
+    if(strata_na) {
       .strata <- as.integer(factor(.weights[.ind_v]))
     } else {
       .strata <- as.integer(factor(.strata[.ind_v]))
@@ -192,7 +194,7 @@ load_data <- function(
 
     # Create strata (if not given)
     .ind_p <- which(.vacc==0)
-    if(is.na(.strata[[1]])) {
+    if(strata_na) {
       .strata <- as.integer(factor(.weights[.ind_p]))
     } else {
       .strata <- as.integer(factor(.strata[.ind_p]))
@@ -206,7 +208,6 @@ load_data <- function(
     )
 
     # Stabilize weights (rescale to sum to sample size)
-    # !!!!! Consider making weights NA in placebo group
     .stb_p <- sum(df_p$weights) / .n_p
     df_p$weights <- df_p$weights / .stb_p
 

@@ -11,9 +11,19 @@
 #'     kernel density estimator is used. For "kde edge", a modified version of
 #'     "kde" is used that allows for a possible point mass at the left edge of
 #'     the marker distribution.
-#' @param dat The data object originally passed into \code{\link{est_ce}}. It is
-#'     only necessary to pass this in if \code{density_type} is not set to
-#'     "none".
+#' @param dat The data object originally passed into \code{\link{est_ce}}, used
+#'     for plotting densities. It is only necessary to pass this in if
+#'     \code{density_type} is not set to "none".
+#' @param dat_alt Alternative data object; a list containing one or more
+#'     dataframes, each of the form \code{data.frame(s=..., weights=...)}.
+#'     Column \code{s} contains biomarker values and column \code{weights}
+#'     contains corresponding two-phase sampling weights. This can be used as an
+#'     alternative to specifying \code{dat}, and is particularly useful for
+#'     plotting multiple densities on a single plot. If plotting multiple
+#'     densities, the order of the dataframes should correspond to the order of
+#'     \code{"vaccine_est"} objects passed in. See examples.
+#' @param labels A character vector of length equal to the length of list(...),
+#'     representing plot labels. Only used if length(list(...))>1.
 #' @param zoom_x Either one of c("zoom in", "zoom out") or a vector of
 #'     length 2. Controls the zooming on the X-axis. The default "zoom in" will
 #'     set the zoom limits to the plot estimates. Choosing "zoom out" will set
@@ -25,21 +35,37 @@
 #'     upper zoom limits explicitly.
 #' @return A plot of CR/CVE estimates
 #' @examples
+#' \donttest{
+#' # Plot one curve
 #' data(hvtn505)
 #' dat <- load_data(time="HIVwk28preunblfu", event="HIVwk28preunbl", vacc="trt",
 #'                  marker="IgG_V2", covariates=c("age","BMI","bhvrisk"),
 #'                  weights="wt", ph2="casecontrol", data=hvtn505)
-#' \donttest{
 #' ests_cox <- est_ce(dat=dat, type="Cox", t_0=578)
+#' plot_ce(ests_cox, density_type="kde", dat=dat)
+#'
+#' # Trim display of plot according to quantiles of the biomarker distribution
+#' ests_cox_tr <- trim(ests_cox, dat=dat, quantiles=c(0.05,0.95))
+#' plot_ce(ests_cox_tr, density_type="kde", dat=dat)
+#'
+#' # Plot multiple curves (same biomarker)
 #' ests_np <- est_ce(dat=dat, type="NP", t_0=578)
-#' plot_ce(ests_cox, ests_np)
+#' plot_ce(ests_cox, ests_np, density_type="kde", dat=dat)
+#'
+#' # Plot multiple curves (two different biomarkers)
+#' dat2 <- load_data(time="HIVwk28preunblfu", event="HIVwk28preunbl", vacc="trt",
+#'                   marker="IgG_env", covariates=c("age","BMI","bhvrisk"),
+#'                   weights="wt", ph2="casecontrol", data=hvtn505)
+#' ests_cox2 <- est_ce(dat=dat2, type="Cox", t_0=578)
+#' dat_alt <- list(
+#'   data.frame(s=dat$s[dat$a==1], weights=dat$weights[dat$a==1]),
+#'   data.frame(s=dat2$s[dat2$a==1], weights=dat2$weights[dat2$a==1])
+#' )
+#' plot_ce(ests_cox, ests_cox2, density_type="kde", dat_alt=dat_alt)
 #' }
 #' @export
-plot_ce <- function(..., which="CR", density_type="none", dat=NA,
-                    zoom_x="zoom in", zoom_y="zoom out") {
-
-  # !!!!! Check dat
-  # !!!!! Move all error handling into a function
+plot_ce <- function(..., which="CR", density_type="none", dat=NA, dat_alt=NA,
+                    zoom_x="zoom in", zoom_y="zoom out", labels=NA) {
 
   # Error handling
   if (!(which %in% c("CR", "CVE"))) {
@@ -49,8 +75,30 @@ plot_ce <- function(..., which="CR", density_type="none", dat=NA,
     stop(paste0("One or more objects of class 'vaccine_est' must be passed int",
                 "o `plot_ce`."))
   }
-  if (density_type!="none" && missing(dat)) {
-    stop("If `density_type` is not set to 'none', `dat` must also be provided.")
+  if (density_type!="none" && missing(dat) && missing(dat_alt)) {
+    stop(paste0("If `density_type` is not set to 'none', either `dat` or `dat_",
+                "alt` must also be provided."))
+  }
+  if (!missing(dat) && !missing(dat_alt)) {
+    stop("Specify either `dat` or `dat_alt`, but not both.")
+  }
+  if (!missing(dat)) {
+    if (!methods::is(dat,"vaccine_dat")) {
+      stop(paste0("`dat` must be an object of class 'vaccine_dat' returned by ",
+                  "load_data()."))
+    }
+  }
+  if (!missing(dat_alt)) {
+    violations <- !methods::is(dat_alt,"list") ||
+      !methods::is(dat_alt[[1]],"data.frame") ||
+      !identical(sort(names(dat_alt[[1]])), c("s", "weights"))
+    if (violations) {
+      stop(paste0("`dat_alt` must be a list containing one or more dataframes,",
+                  " of the form `list(data.frame(s=..., weights=...))`."))
+    }
+    use_dat_alt <- TRUE
+  } else {
+    use_dat_alt <- FALSE
   }
   if (!(length(zoom_x) %in% c(1,2)) ||
       (length(zoom_x)==2 && !methods::is(zoom_x, "numeric")) ||
@@ -68,14 +116,16 @@ plot_ce <- function(..., which="CR", density_type="none", dat=NA,
                 "of length 2."))
   }
 
-  # !!!!! Add to examples:
-  # plot_ce(ests_cox, ests_np, density=list(s=dat_v$s, weights=dat_v$weights))
-
   # To prevent R CMD CHECK notes
   x <- y <- ci_lower <- ci_upper <- curve <- ymin <- ymax <- NULL
   rm(x, y, ci_lower, ci_upper, curve, ymin, ymax)
 
-  df_plot <- as_table(..., which=which)
+  if (missing(labels)) { labels <- sapply(substitute(list(...))[-1], deparse) }
+  df_plot <- as_table(..., which=which, labels=labels)
+
+  # Color scheme
+  curve_colors <- c("deepskyblue3", "darkorchid3", "darkgreen", "darkorange",
+                    "firebrick3", "darkgrey")
 
   # Set X-axis zoom values
   z_x <- rep(NA,2)
@@ -108,70 +158,6 @@ plot_ce <- function(..., which="CR", density_type="none", dat=NA,
     z_y[2] <- z_y[2] + 0.05*(z_y[2]-z_y[1])
   }
 
-  # Construct KDE dataframe
-  if (density_type!="none") {
-
-    dat_v <- dat[dat$a==1,]
-    min_s <- min(dat_v$s, na.rm=T)
-    p_edge <- mean(dat_v$s==min_s, na.rm=T) # !!!!! Make this weighted
-    if (p_edge<0.03 & density_type=="kde edge") { density_type <- "kde" }
-    dens_height <- 0.6 * (z_y[2]-z_y[1])
-
-    if (density_type=="kde") {
-
-      df_dens <- data.frame(
-        s = dat_v$s[!is.na(dat_v$s)],
-        weights = dat_v$weights[!is.na(dat_v$s)]
-      )
-      df_dens$weights <- df_dens$weights / sum(df_dens$weights)
-      dens <- suppressWarnings(stats::density(
-        x = df_dens$s,
-        bw = "ucv",
-        weights = df_dens$weights
-      ))
-      kde_data <- data.frame(
-        x = dens$x,
-        ymin = z_y[1],
-        ymax = dens_height * (dens$y/max(dens$y)) + z_y[1]
-      )
-
-    } else {
-
-      df_dens <- data.frame(
-        s = dat_v$s[!is.na(dat_v$s) & dat_v$s!=min_s],
-        weights = dat_v$weights[!is.na(dat_v$s) & dat_v$s!=min_s]
-      )
-      df_dens$weights <- df_dens$weights / sum(df_dens$weights)
-      dens <- suppressWarnings(stats::density(
-        x = df_dens$s,
-        bw = "ucv",
-        weights = df_dens$weights
-      ))
-      dens$y <- dens$y * (1-p_edge)
-
-      plot_width <- z_x[2]-z_x[1]
-      rect_x <- c(min_s-0.025*plot_width, min_s+0.025*plot_width)
-      rect_y <- p_edge / (rect_x[2]-rect_x[1])
-      inds_to_remove <- dens$x>rect_x[2]
-      dens$x <- dens$x[inds_to_remove]
-      dens$y <- dens$y[inds_to_remove]
-      dens$x[length(dens$x)+1] <- rect_x[1]
-      dens$y[length(dens$y)+1] <- rect_y
-      dens$x[length(dens$x)+1] <- rect_x[2]
-      dens$y[length(dens$y)+1] <- rect_y
-      dens$x[length(dens$x)+1] <- rect_x[2] + plot_width/10^5
-      dens$y[length(dens$y)+1] <- z_y[1]
-
-      kde_data <- data.frame(
-        x = dens$x,
-        ymin = z_y[1],
-        ymax = dens_height * (dens$y/max(dens$y)) + z_y[1]
-      )
-
-    }
-
-  }
-
   # Set plot labels
   if (which=="CR") {
     labs <- list(title="Controlled Risk", y="Risk")
@@ -186,35 +172,134 @@ plot_ce <- function(..., which="CR", density_type="none", dat=NA,
   ) +
     ggplot2::coord_cartesian(xlim=z_x, ylim=z_y, expand=F)
 
-  # Plot background KDE
+  # Construct KDE dataframe
   if (density_type!="none") {
-    plot <- plot + ggplot2::geom_ribbon(
-      ggplot2::aes(x=x, ymin=ymin, ymax=ymax),
-      data = kde_data,
-      inherit.aes = F,
-      color = "white",
-      fill = "orange", # "forestgreen"
-      alpha = 0.3
+
+    if (!is.null(attr(list(...)[[1]], "cr_placebo_arm")) && !use_dat_alt) {
+      dat$a <- 1-dat$a
+    }
+
+    if (!use_dat_alt) { dat_alt <- list(dat[dat$a==1,]) }
+
+    kde_area <- c()
+    kde_data_final <- data.frame(
+      "x" = double(),
+      "ymin" = double(),
+      "ymax" = double(),
+      "curve" = character()
     )
+
+    for (i in c(1:length(dat_alt))) {
+
+      dat_ <- dat_alt[[i]]
+      min_s <- min(dat_$s, na.rm=T)
+      p_edge <- sum(dat_$weights*In(dat_$s==min_s), na.rm=T)/nrow(dat_)
+      if (p_edge>=0.03 & density_type=="kde edge") {
+        density_type2 <- "kde edge"
+      } else {
+        density_type2 <- "kde"
+      }
+      dens_height <- 0.6 * (z_y[2]-z_y[1])
+
+      if (density_type2=="kde") {
+
+        df_dens <- data.frame(
+          s = dat_$s[!is.na(dat_$s)],
+          weights = dat_$weights[!is.na(dat_$s)]
+        )
+        df_dens$weights <- df_dens$weights / sum(df_dens$weights)
+        dens <- suppressWarnings(stats::density(
+          x = df_dens$s,
+          bw = "ucv",
+          weights = df_dens$weights
+        ))
+
+      } else {
+
+        df_dens <- data.frame(
+          s = dat_$s[!is.na(dat_$s) & dat_$s!=min_s],
+          weights = dat_$weights[!is.na(dat_$s) & dat_$s!=min_s]
+        )
+        df_dens$weights <- df_dens$weights / sum(df_dens$weights)
+        dens <- suppressWarnings(stats::density(
+          x = df_dens$s,
+          bw = "ucv",
+          weights = df_dens$weights
+        ))
+        dens$y <- dens$y * (1-p_edge)
+
+        plot_width <- z_x[2]-z_x[1]
+        rect_x <- c(min_s-0.025*plot_width, min_s+0.025*plot_width)
+        rect_y <- p_edge / (rect_x[2]-rect_x[1])
+        inds_to_keep <- dens$x>rect_x[2]
+        dens$x <- dens$x[inds_to_keep]
+        dens$y <- dens$y[inds_to_keep]
+        dens$x <- c(rect_x[1], rect_x[2], rect_x[2] + plot_width/10^5, dens$x)
+        dens$y <- c(rect_y, rect_y, z_y[1], dens$y)
+
+      }
+
+      kde_data <- data.frame(
+        x = dens$x,
+        ymin = z_y[1],
+        ymax = dens_height * (dens$y/max(dens$y)) + z_y[1],
+        curve = labels[i]
+      )
+      assign(x=paste0("kde_data_",i), value=kde_data)
+
+      inds <- c(2:nrow(kde_data))
+      kde_area_x <- kde_data$x[inds] - kde_data$x[inds-1]
+      kde_area_y <- kde_data$ymax[inds] - kde_data$ymin[inds]
+      kde_area[i] <- sum(kde_area_x*kde_area_y)
+
+    }
+
+    for (i in c(1:length(dat_alt))) {
+
+      # If there are multiple densities, scale them so that they have the same area
+      kde_data <- get(paste0("kde_data_",i))
+      area_mult <- min(kde_area)/kde_area[i]
+      kde_data$ymax <- area_mult*(kde_data$ymax-kde_data$ymin) + kde_data$ymin
+      kde_data_final <- rbind(kde_data_final, kde_data)
+
+    }
+
+    # Plot background KDE
+    if (length(dat_alt)==1) {
+      plot <- plot + ggplot2::geom_ribbon(
+        ggplot2::aes(x=x, ymin=ymin, ymax=ymax),
+        data = kde_data_final,
+        inherit.aes = F,
+        color = "white",
+        fill = "orange",
+        alpha = 0.2
+      )
+    } else {
+      plot <- plot + ggplot2::geom_ribbon(
+        ggplot2::aes(x=x, ymin=ymin, ymax=ymax, fill=curve),
+        data = kde_data_final,
+        inherit.aes = F,
+        color = "white",
+        alpha = 0.2
+      )
+    }
+
   }
 
   # Primary plot
   plot <- plot +
     ggplot2::geom_line() +
     ggplot2::geom_ribbon(ggplot2::aes(ymin=ci_lower, ymax=ci_upper), # color="darkorchid3", fill="darkorchid3"
-                         alpha = 0.1, linetype = "dotted") +
+                         alpha = 0.05, linetype = "dotted") +
     ggplot2::labs(title=labs$title, x="S", y=labs$y, color="",
                   fill="") +
+    ggplot2::scale_color_manual(values=curve_colors) +
+    ggplot2::scale_fill_manual(values=curve_colors) +
     ggplot2::theme(
       legend.position = "bottom",
       panel.background = ggplot2::element_blank(),
       panel.border = ggplot2::element_rect(color="#bbbbbb", fill=NA)
     )
-
-  # Implement these eventually
-  curve_colors <- c("darkgrey", "darkorchid3", "firebrick3", "deepskyblue3",
-                    "darkgreen", "darkorange")
-  # curve_colors <- c("darkgreen", "darkorange")
 
   return(plot)
 
@@ -232,22 +317,28 @@ plot_ce <- function(..., which="CR", density_type="none", dat=NA,
 #'     marker distribution at which to trim the data; if, for example,
 #'     \code{quantiles=c(0.1,0.9)} is specified, values outside the 10% and 90%
 #'     (weighted) quantiles of the marker distribution will be trimmed.
+#' @param placebo Boolean; if TRUE, quantiles are computed based on the marker
+#'     distribution in the placebo arm instead of the vaccine arm
 #' @return A modified copy of \code{ests} with the data trimmed.
 #' @examples
+#' \donttest{
 #' data(hvtn505)
 #' dat <- load_data(time="HIVwk28preunblfu", event="HIVwk28preunbl", vacc="trt",
 #'                  marker="IgG_V2", covariates=c("age","BMI","bhvrisk"),
 #'                  weights="wt", ph2="casecontrol", data=hvtn505)
-#' \donttest{
 #' ests_cox <- est_ce(dat=dat, type="Cox", t_0=578)
-#' ests_cox <- trim(ests_cox, dat=dat, quantiles=c(0.1,0.9))
-#' plot_ce(ests_cox, density_type="kde", dat=dat)
+#' ests_cox_tr <- trim(ests_cox, dat=dat, quantiles=c(0.05,0.95))
+#' plot_ce(ests_cox_tr, density_type="kde", dat=dat)
 #' }
 #' @export
-trim <- function(ests, dat, quantiles) {
+trim <- function(ests, dat, quantiles, placebo=FALSE) {
 
-  dat_v <- dat[dat$a==1,]
-  cutoffs <- stats::quantile(dat_v$s, na.rm=T, probs=quantiles) # !!!!! Make this weighted quantile
+  if (placebo) {
+    dat_ <- dat[dat$a==0,]
+  } else {
+    dat_ <- dat[dat$a==1,]
+  }
+  cutoffs <- stats::quantile(dat_$s, na.rm=T, probs=quantiles) # !!!!! Make this weighted quantile
 
   for (i in c(1:length(ests))) {
     if (names(ests)[i] %in% c("cr", "cve")) {
@@ -271,6 +362,8 @@ trim <- function(ests, dat, quantiles) {
 #'     \code{\link{est_ce}}.
 #' @param which One of c("CR", "CVE"); controls whether the table contains CR or
 #'     CVE values.
+#' @param labels A character vector of length equal to length(list(...))
+#'     representing curve labels
 #' @return A table of CR or CVE values
 #' @examples
 #' data(hvtn505)
@@ -284,7 +377,7 @@ trim <- function(ests, dat, quantiles) {
 #' head(ests_table)
 #' }
 #' @export
-as_table <- function(..., which="CR") {
+as_table <- function(..., which="CR", labels=NA) {
 
   # !!!!! Move all error handling into a function
 
@@ -295,8 +388,6 @@ as_table <- function(..., which="CR") {
     ci_upper = double(),
     curve = character()
   )
-
-  labels <- sapply(substitute(list(...))[-1], deparse)
 
   counter <- 1
   for (obj in list(...)) {

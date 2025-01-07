@@ -321,7 +321,10 @@ est_np <- function(
   } else if (p$convex_type=="CLS") {
     # This approach is experimental; asymptotic theory not yet developed
     gcm <- function(x) { 1 } # Ignored
-    fit <- simest::cvx.lse.reg(t=gcm_x_vals, z=gcm_y_vals)
+    stop(paste0("convex_type='CLS' temporarily disabled because of dependency ",
+                "issue with package simest."))
+    # fit <- simest::cvx.lse.reg(t=gcm_x_vals, z=gcm_y_vals)
+    fit <- NA
     pred_x <- round(seq(0,1,0.001),3)
     pred_y <- stats::predict(fit, newdata=pred_x)
     dGCM <- function(u) {
@@ -632,8 +635,6 @@ est_np <- function(
       }
     }
 
-    if (return_p_value) { res$p <- test_res$p }
-
     res$extras <- list(
       r_Mn = data.frame(
         s = s_out_orig,
@@ -655,17 +656,19 @@ est_np <- function(
       Qc_n = Qc_n_df
     )
 
-    # !!!!! TEMP
-    if (p$edge_corr) {
-      res$extras$r_Mn_edge_est <- r_Mn_edge_est
-      res$extras$r_Mn_0 <- r_Mn(0)
-      res$extras$r_Mn_Gr_0 <- r_Mn_Gr(0)
-      res$extras$sigma2_edge_est <- sigma2_edge_est
-      res$extras$risk_p <- risk_p
-      res$extras$se_p <- se_p
-    }
+    # # !!!!! TEMP
+    # if (p$edge_corr) {
+    #   res$extras$r_Mn_edge_est <- r_Mn_edge_est
+    #   res$extras$r_Mn_0 <- r_Mn(0)
+    #   res$extras$r_Mn_Gr_0 <- r_Mn_Gr(0)
+    #   res$extras$sigma2_edge_est <- sigma2_edge_est
+    #   res$extras$risk_p <- risk_p
+    #   res$extras$se_p <- se_p
+    # }
 
   }
+
+  if (return_p_value) { res$p <- test_res$p }
 
   return(res)
 

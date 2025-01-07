@@ -4,7 +4,7 @@
 \alias{trim}
 \title{Trim data for plotting/reporting}
 \usage{
-trim(ests, dat, quantiles)
+trim(ests, dat, quantiles, placebo = FALSE)
 }
 \arguments{
 \item{ests}{An object of class \code{"vaccine_est"} returned by
@@ -16,6 +16,9 @@ trim(ests, dat, quantiles)
 marker distribution at which to trim the data; if, for example,
 \code{quantiles=c(0.1,0.9)} is specified, values outside the 10% and 90%
 (weighted) quantiles of the marker distribution will be trimmed.}
+
+\item{placebo}{Boolean; if TRUE, quantiles are computed based on the marker
+distribution in the placebo arm instead of the vaccine arm}
 }
 \value{
 A modified copy of \code{ests} with the data trimmed.
@@ -24,13 +27,13 @@ A modified copy of \code{ests} with the data trimmed.
 Removes a subset of estimates returned by \code{\link{est_ce}}
 }
 \examples{
+\donttest{
 data(hvtn505)
 dat <- load_data(time="HIVwk28preunblfu", event="HIVwk28preunbl", vacc="trt",
                  marker="IgG_V2", covariates=c("age","BMI","bhvrisk"),
                  weights="wt", ph2="casecontrol", data=hvtn505)
-\donttest{
 ests_cox <- est_ce(dat=dat, type="Cox", t_0=578)
-ests_cox <- trim(ests_cox, dat=dat, quantiles=c(0.1,0.9))
-plot_ce(ests_cox, density_type="kde", dat=dat)
+ests_cox_tr <- trim(ests_cox, dat=dat, quantiles=c(0.05,0.95))
+plot_ce(ests_cox_tr, density_type="kde", dat=dat)
 }
 }
